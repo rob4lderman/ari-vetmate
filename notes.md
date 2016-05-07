@@ -1,4 +1,12 @@
 
+
+smtplib.SMTPAuthenticationError: (534, b'5.7.14 <
+https://accounts.google.com/signin/continue?sarp=1&scc=1&plt=AKgnsbvd
+\n5.7.14 3F353-iUfA_DgvkU0wGEqYc_YSS_mrEqnZyTl1xkdr8VSsZcxeM-NKkHbS8iQ6wzse_SnD\n5.7.14 27eHnNiiWuY9vSDfbGQOkV-K2j7jvXhmhy-yby2Yp_ZAtmZx4r
+BExEqiEEf4yYYo9yVuOl\n5.7.14 8IuVh3ql6TbS2SzaVj6EOMtRmNqWK89ekd3eFQJUj7Jl296kOvCDqBNHkd4TFHp6uIhEV0\n5.7.14 y9aFFbFlQkCsTgubfsIn
+7SlTI2aV4> Please log in via your web browser and\n5.7.14 then try again.\n5.7.14  Learn more at\n5.7.14  https://support.google
+.com/mail/answer/78754 l66sm7355431qhc.42 - gsmtp')
+
 # Ari''s T-Storm Alerts App for Dog Owners
 
 
@@ -43,6 +51,13 @@ heroku addons:create scheduler:standard
 # go to scheduler on web dashboard
 heroku addons:open scheduler
 Add Job -> run -> Hourly -> Next: :30 Dyno: Free
+
+
+heroku addons:create postmark:10k
+heroku config:get POSTMARK_API_TOKEN -s  >> .env
+heroku config:get POSTMARK_SMTP_SERVER -s  >> .env
+heroku config:get POSTMARK_INBOUND_ADDRESS -s  >> .env
+
 
 ---------------------------------------------------------------------------------------------
 ## TODO

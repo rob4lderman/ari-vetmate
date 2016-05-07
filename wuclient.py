@@ -19,6 +19,8 @@ from pymongo import MongoClient
 from mailer import Mailer
 from mailer import Message
 
+from postmark import PMMail
+
 #        datestr = datestr + " {}".format( date.today().year )
 #        tmpdate = datetime.strptime(datestr, "%b %d %Y")
 #        return tmpdate.strftime("%m/%d/%y")
@@ -143,6 +145,20 @@ def sendNotificationViaEmail( fromAddr, fromPass, toAddr, subject, msg):
                      pwd=fromPass )
     sender.send(message)
 
+
+#
+# Send notification!
+# Note: need to enable "less secure apps" in gmail: https://www.google.com/settings/security/lesssecureapps
+#
+def sendNotificationViaPostmark( fromAddr, toAddr, subject, msg):
+
+    message = PMMail(api_key = os.environ.get('POSTMARK_API_TOKEN'),
+                     subject = subject,
+                     sender = fromAddr,
+                     to = toAddr
+                     text_body = msg,
+                     tag = "ari") 
+    message.send()
 
 #
 # Send an email.
@@ -608,12 +624,12 @@ def downloadWeatherData( args ):
 # Send the notification msg to the given user
 #
 def sendMessageToUser( msg, user ):
-    gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
-    sendNotificationViaEmail( gmailcreds.split(":",1)[0],
-                              gmailcreds.split(":",1)[1],
-                              decryptCreds( user["notificationEmail"] ),
-                              msg["subject"],
-                              msg["msg"] )
+    # -rx- gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
+
+    sendNotificationViaPostmark( "team@surfapi.com",
+                                 decryptCreds( user["notificationEmail"] ),
+                                 msg["subject"],
+                                 msg["msg"] )
 
 #
 # Send the notification msg to the given set of users
