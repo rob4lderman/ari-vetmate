@@ -28,6 +28,23 @@
 
 
 ---------------------------------------------------------------------------------------------
+## Heroku commands:
+
+heroku login
+heroku create
+heroku config:set ARI_MONGO_URI=...
+heroku config:set ARI_CREDS=...
+heroku config:set ARI_AES_KEY=...
+
+heroku run run
+
+heroku addons:create scheduler:standard
+
+# go to scheduler on web dashboard
+heroku addons:open scheduler
+Add Job -> run -> Hourly -> Next: :30 Dyno: Free
+
+---------------------------------------------------------------------------------------------
 ## TODO
 
 TODO: python app 

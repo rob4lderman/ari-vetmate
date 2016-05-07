@@ -1,2 +1,2 @@
-run: python wuclient.py --action fetchAndProcessWeatherData+sendNotifications
+go: python ./wuclient.py --action fetchAndProcessWeatherData+sendNotifications
 
