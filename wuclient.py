@@ -155,7 +155,7 @@ def sendNotificationViaPostmark( fromAddr, toAddr, subject, msg):
     message = PMMail(api_key = os.environ.get('POSTMARK_API_TOKEN'),
                      subject = subject,
                      sender = fromAddr,
-                     to = toAddr
+                     to = toAddr,
                      text_body = msg,
                      tag = "ari") 
     message.send()
