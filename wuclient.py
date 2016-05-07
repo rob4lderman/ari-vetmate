@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 #
+# ENV VARS:
+# ARI_MONGO_URI
+# ARI_CREDS
 #
 #
 
@@ -22,6 +25,13 @@ from mailer import Message
 # https://docs.python.org/3.3/library/datetime.html#strftime-strptime-behavior
 from datetime import date, datetime, timedelta, timezone
 import pytz
+
+#
+# API: https://www.dlitz.net/software/pycrypto/api/current/
+#
+from Crypto.Cipher import AES
+from Crypto import Random
+import base64
 
 
 #
@@ -140,8 +150,9 @@ def sendNotificationViaEmail( fromAddr, fromPass, toAddr, subject, msg):
 #
 def sendEmail(args):
 
-    args['--gmailuser'] = os.environ["gmailuser"]
-    args['--gmailpass'] = os.environ["gmailpass"]
+    gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
+    args['--gmailuser'] = gmailcreds.split(":",1)[0]
+    args['--gmailpass'] = gmailcreds.split(":",1)[1]
 
     args = verifyArgs( args , required_args = [ '--toaddr', '--subject', '--msg', '--gmailuser', '--gmailpass' ] )
 
@@ -152,43 +163,15 @@ def sendEmail(args):
                               args['--msg'] )
 
 
-
-# -rx- #
-# -rx- # TODO
-# -rx- # Send notification!
-# -rx- # Note: need to enable "less secure apps" in gmail: https://www.google.com/settings/security/lesssecureapps
-# -rx- #
-# -rx- def sendEmailSummary( args ):
-# -rx- 
-# -rx-     message = Message(From=args["--gmailuser"],
-# -rx-                       To=args["--to"])
-# -rx- 
-# -rx-     message.Subject = "ThinMint Daily Account Summary"
-# -rx- 
-# -rx-     emailLinesText = readLines( args["--inputfile"] )
-# -rx-     emailLinesHtml = readLines( args["--inputfile"] + ".html" )
-# -rx- 
-# -rx-     message.Html = "".join( emailLinesHtml )
-# -rx-     message.Body = "\n".join( emailLinesText )
-# -rx- 
-# -rx-     sender = Mailer('smtp.gmail.com', 
-# -rx-                      port=587,
-# -rx-                      use_tls=True, 
-# -rx-                      usr=args["--gmailuser"],
-# -rx-                      pwd=args["--gmailpass"] )
-# -rx-     sender.send(message)
-
-
 #
 # @return a ref to the mongo db by the given name.
 #
 def getMongoDb( mongoUri ):
     dbname = mongoUri.split("/")[-1]
+    hostname = mongoUri.split("@")[-1]
     mongoClient = MongoClient( mongoUri )
-    print("getMongoDb: connected to {}, database {}".format( mongoUri, dbname ) )
+    print("getMongoDb: connected to mongodb://{}, database {}".format( hostname, dbname ) )
     return mongoClient[dbname]
-
-
 
 
 #
@@ -541,8 +524,9 @@ def buildTstormWarningMessage( zipcode, hourly_forecast ):
     retMe["_id"] = "tstorm-" + zipcode + "-" + formatFCTTIME( hourly_forecast["FCTTIME"] )
     retMe["zipcode"] = zipcode
     retMe["subject"] = "STORM ALERT!"
-    retMe["msg"] = "{0}% chance of thunderstorms at {1}".format( hourly_forecast["pop"],
-                                                                              hourly_forecast["FCTTIME"]["civil"] )
+    retMe["msg"] = "{2}: {0}% chance of thunderstorms at {1}".format( hourly_forecast["pop"],
+                                                                      hourly_forecast["FCTTIME"]["civil"],
+                                                                      zipcode)
     logTrace("buildTstormWarningMessage: retMe:", json.dumps(retMe))
     return retMe
 
@@ -589,9 +573,10 @@ def downloadWeatherData( args ):
 # Send the notification msg to the given user
 #
 def sendMessageToUser( msg, user ):
-    sendNotificationViaEmail( os.environ["gmailuser"],
-                              os.environ["gmailpass"],
-                              user["notificationEmail"],
+    gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
+    sendNotificationViaEmail( gmailcreds.split(":",1)[0],
+                              gmailcreds.split(":",1)[1],
+                              decryptCreds( user["notificationEmail"] ),
                               msg["subject"],
                               msg["msg"] )
 
@@ -616,7 +601,7 @@ def getUnsentMessages(db):
 # @return all users in the given zipcode
 #
 def getUsersInZipcode(db, zipcode):
-    retMe = list( db["/ari/users"].find( { "zipcode": zipcode } ) )
+    retMe = list( db["/ari/users"].find( { "zipcode": encryptCreds(zipcode) } ) )
     logTrace("getUsersInZipcode: zipcode:", zipcode, "retMe:", json.dumps(retMe))
     return retMe
 
@@ -627,9 +612,11 @@ def getUsersInZipcode(db, zipcode):
 #
 def sendNotifications( args ):
 
-    args['--gmailuser'] = os.environ["gmailuser"]
-    args['--gmailpass'] = os.environ["gmailpass"]
-    args['--mongouri'] = os.environ["mongouri"]
+    args['--mongouri'] = decryptCreds( os.environ["ARI_MONGO_URI"] )
+
+    gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
+    args['--gmailuser'] = gmailcreds.split(":",1)[0]
+    args['--gmailpass'] = gmailcreds.split(":",1)[1]
 
     args = verifyArgs( args , required_args = [ '--mongouri', '--gmailuser', '--gmailpass' ] )
 
@@ -668,7 +655,7 @@ def processWeatherData(db, zipcode, weatherData):
 #
 def fetchAndProcessWeatherData(args): 
 
-    args['--mongouri'] = os.environ["mongouri"]
+    args['--mongouri'] = decryptCreds( os.environ["ARI_MONGO_URI"] )
     args = verifyArgs( args , required_args = [ '--mongouri' ] )
 
     # fetch the list of zipcodes from the users collection
@@ -676,6 +663,7 @@ def fetchAndProcessWeatherData(args):
     zipcodes = db["/ari/users"].distinct( "zipcode" )
 
     for zipcode in zipcodes:
+        zipcode = decryptCreds( zipcode )
         weatherData = fetchWeatherData(zipcode)
         processWeatherData(db, zipcode, weatherData)
 
@@ -684,7 +672,7 @@ def fetchAndProcessWeatherData(args):
 #
 def loadAndProcessWeatherData(args): 
 
-    args['--mongouri'] = os.environ["mongouri"]
+    args['--mongouri'] = decryptCreds( os.environ["ARI_MONGO_URI"] )
     args = verifyArgs( args , required_args = [ '--mongouri', '--zipcode', '--inputfile' ] )
 
     db = getMongoDb( args["--mongouri"] )
@@ -701,9 +689,9 @@ def loadAndProcessWeatherData(args):
 def buildUser(args):
     retMe = {}
     retMe["_id"] = args["--user"]
-    retMe["zipcode"] = args["--zipcode"]
-    retMe["notificationEmail"] = args["--notificationEmail"]
-    retMe["zipcodeTimeZone"] = fetchTimeZone( retMe["zipcode"] )
+    retMe["zipcode"] = encryptCreds( args["--zipcode"] )
+    retMe["notificationEmail"] = encryptCreds( args["--notificationEmail"] )
+    # retMe["zipcodeTimeZone"] = fetchTimeZone( retMe["zipcode"] )
     return retMe
 
 
@@ -713,7 +701,7 @@ def buildUser(args):
 #
 def addUser(args):
 
-    args['--mongouri'] = os.environ["mongouri"]
+    args['--mongouri'] = decryptCreds( os.environ["ARI_MONGO_URI"] )
     args = verifyArgs( args , required_args = [ '--mongouri', '--user', '--zipcode', '--notificationEmail' ] )
 
     db = getMongoDb( args["--mongouri"] )
@@ -732,7 +720,7 @@ def addUser(args):
 #
 def getDistinctZipcodes(args):
 
-    args['--mongouri'] = os.environ["mongouri"]
+    args['--mongouri'] = decryptCreds( os.environ["ARI_MONGO_URI"] )
     args = verifyArgs( args , required_args = [ '--mongouri' ] )
 
     db = getMongoDb( args["--mongouri"] )
@@ -768,6 +756,93 @@ def playWithDates(args):
     logTrace("playWithDates: datetime.now(tz=pytz.timezone([merica/New_York)):", n, n.strftime("%a %m/%d/%Y %H:%M:%S z=%z Z=%Z"))
 
 
+#
+# ---- encryption ----------------------------------------------
+
+#
+# @return the string s, padded on the right to the nearest multiple of bs.
+#         the pad char is the ascii char for the pad length.
+#
+def pad(s, bs):
+    retMe = s + (bs - len(s) % bs) * chr(bs - len(s) % bs)
+    # print("pad: retMe: #" + retMe + "#")
+    return retMe
+
+
+#
+# @param s a string or byte[] previously returned by pad. 
+#          assumes the pad char is equal to the length of the pad
+#
+# @return s with the pad on the right removed.
+#
+def unpad(s):
+    retMe = s[:-ord(s[len(s)-1:])]
+    # print("unpad: retMe:", retMe)
+    return retMe
+
+
+#
+# @param key - key size can be 16, 24, or 32 bytes (128, 192, 256 bits)
+#              You must use the same key when encrypting and decrypting.
+# @param msg - the msg to encrypt
+#
+# @return base64-encoded ciphertext
+#
+def encrypt(key, msg):
+    msg = pad(msg, AES.block_size)
+
+    #
+    # iv is like a salt.  it's used for randomizing the encryption
+    # such that the same input msg isn't encoded to the same cipher text
+    # (so long as you use a different iv).  The iv is then prepended to
+    # the ciphertext.  Before decrypting, you must remove the iv and only
+    # decrypt the ciphertext.
+    #
+    # Note: AES.block_size is always 16 bytes (128 bits)
+    #
+    iv = Random.new().read(AES.block_size)
+
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+
+    #
+    # Note: the iv is prepended to the encrypted message
+    # encryptedMsg is a base64-encoded byte[] 
+    # 
+    return base64.b64encode(iv + cipher.encrypt(msg))
+
+
+#
+# @param key - key size can be 16, 24, or 32 bytes (128, 192, 256 bits)
+#              You must use the same key when encrypting and decrypting.
+# @param encryptedMsg - the msg to decrypt (base64-encoded), previously returned 
+#                       by encrypt.  First 16 bytes is the iv (salt)
+#
+def decrypt(key, encryptedMsg):
+    enc = base64.b64decode(encryptedMsg)
+    iv = enc[:AES.block_size]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return unpad(cipher.decrypt(enc[AES.block_size:])).decode('utf-8')
+
+
+#
+# @return AES-encrypted creds
+#
+def encryptCreds( creds ):
+    key = os.environ['ARI_AES_KEY'].encode('utf-8')
+    return encrypt(key, creds).decode('utf-8')
+
+
+#
+# @return AES-derypted creds
+#
+def decryptCreds( encCreds ):
+    key = os.environ['ARI_AES_KEY'].encode('utf-8')
+    return decrypt(key, encCreds )
+
+
+
+
+
 
 #
 # main entry point ---------------------------------------------------------------------------
@@ -799,6 +874,15 @@ elif args["--action"] == "sendEmail":
 
 elif args["--action"] == "sendNotifications":
     sendNotifications(args)
+
+elif args["--action"] == "encryptCreds":
+    args = verifyArgs( args , required_args = [ '--msg' ] )
+    logInfo("encryptCreds:", encryptCreds(args["--msg"]) )
+
+elif args["--action"] == "fetchAndProcessWeatherData+sendNotifications":
+    fetchAndProcessWeatherData(args)
+    sendNotifications(args)
+
 
 
 else:
