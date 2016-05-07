@@ -123,9 +123,9 @@ def readJson( filename ):
 # Send notification!
 # Note: need to enable "less secure apps" in gmail: https://www.google.com/settings/security/lesssecureapps
 #
-def sendNotificationViaEmail( fromAddr, fromPass, toAddr, subject, msg):
+def sendNotificationViaGmail( fromAddr, fromPass, toAddr, subject, msg):
 
-    logTrace("sendNotificationViaEmail: fromAddr:", fromAddr,
+    logTrace("sendNotificationViaGmail: fromAddr:", fromAddr,
                                        "fromPass:", ("x" * len(fromPass) ),
                                        "toAddr:", toAddr,
                                        "subject:", subject,
@@ -152,6 +152,11 @@ def sendNotificationViaEmail( fromAddr, fromPass, toAddr, subject, msg):
 #
 def sendNotificationViaPostmark( fromAddr, toAddr, subject, msg):
 
+    logTrace("sendNotificationViaPostmark: fromAddr:", fromAddr,
+                                           "toAddr:", toAddr,
+                                           "subject:", subject,
+                                            "msg:", msg )
+
     message = PMMail(api_key = os.environ.get('POSTMARK_API_TOKEN'),
                      subject = subject,
                      sender = fromAddr,
@@ -171,7 +176,7 @@ def sendEmail(args):
 
     args = verifyArgs( args , required_args = [ '--toaddr', '--subject', '--msg', '--gmailuser', '--gmailpass' ] )
 
-    sendNotificationViaEmail( args['--gmailuser'],
+    sendNotificationViaGmail( args['--gmailuser'],
                               args['--gmailpass'],
                               args['--toaddr'],
                               args['--subject'],
@@ -624,7 +629,6 @@ def downloadWeatherData( args ):
 # Send the notification msg to the given user
 #
 def sendMessageToUser( msg, user ):
-    # -rx- gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
 
     sendNotificationViaPostmark( "team@surfapi.com",
                                  decryptCreds( user["notificationEmail"] ),
@@ -665,11 +669,11 @@ def sendNotifications( args ):
 
     args['--mongouri'] = decryptCreds( os.environ["ARI_MONGO_URI"] )
 
-    gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
-    args['--gmailuser'] = gmailcreds.split(":",1)[0]
-    args['--gmailpass'] = gmailcreds.split(":",1)[1]
+    # -rx- gmailcreds = decryptCreds( os.environ["ARI_CREDS"] )
+    # -rx- args['--gmailuser'] = gmailcreds.split(":",1)[0]
+    # -rx- args['--gmailpass'] = gmailcreds.split(":",1)[1]
 
-    args = verifyArgs( args , required_args = [ '--mongouri', '--gmailuser', '--gmailpass' ] )
+    args = verifyArgs( args , required_args = [ '--mongouri' ] )
 
     db = getMongoDb( args["--mongouri"] )
 
@@ -686,16 +690,14 @@ def sendNotifications( args ):
 # @return true if it's 7am
 #
 def isTimeForMorningForecast( fcttime ):
-    # TODO: return fcttime["hour_padded"] == "07"
-    return fcttime["hour_padded"] == "03"
+    return fcttime["hour_padded"] == "07"
 
 
 #
 # @return true if it's 7pm
 #
 def isTimeForEveningForecast( fcttime ):
-    # TODO: return fcttime["hour_padded"] == "19"
-    return fcttime["hour_padded"] == "03"
+    return fcttime["hour_padded"] == "19"
 
 
 #
