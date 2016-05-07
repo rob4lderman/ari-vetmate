@@ -54,7 +54,6 @@ def logInfo( *objs ):
 
 
 #
-# TODO
 # Parse command line args  
 #
 # @return a dictionary of opt=val
@@ -328,35 +327,7 @@ def getMongoDb( mongoUri ):
 # 23	Ice Pellets	
 # 24	Blizzard	
 # 
-# condition - icon
-# Chance of Flurries	    chanceflurries	
-# Chance of Rain	        chancerain	
-# Chance Rain	            chancerain	
-# Chance of Freezing Rain	chancesleet	
-# Chance of Sleet	        chancesleet	
-# Chance of Snow	        chancesnow	
-# Chance of Thunderstorms	chancetstorms	
-# Chance of a Thunderstorm	chancetstorms	
-# Clear	                    clear	
-# Cloudy	                cloudy	
-# Flurries	                flurries	
-# Fog	                    fog	
-# Haze	                    hazy	
-# Mostly Cloudy	            mostlycloudy	
-# Mostly Sunny	            mostlysunny	
-# Partly Cloudy	            partlycloudy	
-# Partly Sunny	            partlysunny	
-# Freezing Rain	            sleet	
-# Rain	                    rain	
-# Sleet	                    sleet	
-# Snow	                    snow	
-# Sunny	                    sunny	
-# Thunderstorms	            tstorms	
-# Thunderstorm	            tstorms	
-# Unknown	                unknown	
-# Overcast	                cloudy	
-# Scattered Clouds	        partlycloudy	
-
+#
 # @return the data in a dict
 # @throws raise_for_status() if a non-200 status_code
 #
@@ -369,6 +340,73 @@ def fetchWeatherData(zipcode):
         return r.json()
     else:
         r.raise_for_status()
+
+
+
+#
+# condition               - icon              - coarse
+# Chance of Flurries	    chanceflurries	--> snow
+# Chance of Rain	        chancerain	    --> rain
+# Chance Rain	            chancerain	    --> rain
+# Chance of Freezing Rain	chancesleet	    --> snow
+# Chance of Sleet	        chancesleet	    --> snow
+# Chance of Snow	        chancesnow	    --> snow
+# Chance of Thunderstorms	chancetstorms	--> tstorms
+# Chance of a Thunderstorm	chancetstorms	--> tstorms
+# Clear	                    clear	        --> sunny
+# Cloudy	                cloudy	        --> cloudy
+# Flurries	                flurries	    --> snow
+# Fog	                    fog	            --> rain
+# Haze	                    hazy	        --> sunny
+# Mostly Cloudy	            mostlycloudy	--> cloudy
+# Mostly Sunny	            mostlysunny	    --> sunny
+# Partly Cloudy	            partlycloudy	--> cloudy
+# Partly Sunny	            partlysunny	    --> sunny
+# Freezing Rain	            sleet	        --> snow
+# Rain	                    rain	        --> rain
+# Sleet	                    sleet	        --> snow
+# Snow	                    snow	        --> snow
+# Sunny	                    sunny	        --> sunny
+# Thunderstorms	            tstorms	        --> tstorms
+# Thunderstorm	            tstorms	        --> tstorms
+# Unknown	                unknown	        --> sunny
+# Overcast	                cloudy	        --> cloudy
+# Scattered Clouds	        partlycloudy	--> cloudy
+#
+# @return the more coarse-grained label for the given icon
+#
+def mapIconToCoarseLabel( icon ):
+
+    iconMap = {
+        "chanceflurries":   "snow",
+        "chancerain":       "rain",
+        "chancerain":       "rain",
+        "chancesleet":      "snow",
+        "chancesleet":      "snow",
+        "chancesnow":       "snow",
+        "chancetstorms":    "t-storms",
+        "chancetstorms":    "t-storms",
+        "clear":            "clear",    # "sunny" doesnt work for nighttime
+        "cloudy":           "cloudy",
+        "flurries":         "snow",
+        "fog":              "rain",
+        "hazy":             "clear",
+        "mostlycloudy":     "cloudy",
+        "mostlysunny":      "clear",
+        "partlycloudy":     "cloudy",
+        "partlysunny":      "clear",
+        "sleet":            "snow",
+        "rain":             "rain",
+        "sleet":            "snow",
+        "snow":             "snow",
+        "sunny":            "clear",
+        "tstorms":          "t-storms",
+        "tstorms":          "t-storms",
+        "unknown":          "clear",
+        "cloudy":           "cloudy",
+        "partlycloudy":     "cloudy"
+    }
+    return iconMap[icon]
 
 
 #
@@ -405,9 +443,6 @@ def fetchWeatherData(zipcode):
 #        }
 #
 # @return the tz_short for the given zipcode
-#
-# TODO: need to update tz from time to time in order to adjust from daylight time to standard time, e.g.
-#       or maybe not... if using tz_long...
 #
 def fetchTimeZone(zipcode):
 
@@ -525,7 +560,7 @@ def buildTstormWarningMessage( zipcode, hourly_forecast ):
     retMe["zipcode"] = zipcode
     retMe["subject"] = "STORM ALERT!"
     retMe["msg"] = "{2}: {0}% chance of thunderstorms at {1}".format( hourly_forecast["pop"],
-                                                                      hourly_forecast["FCTTIME"]["civil"],
+                                                                      hourly_forecast["FCTTIME"]["civil"].replace(":00 ",""),
                                                                       zipcode)
     logTrace("buildTstormWarningMessage: retMe:", json.dumps(retMe))
     return retMe
@@ -601,7 +636,7 @@ def getUnsentMessages(db):
 # @return all users in the given zipcode
 #
 def getUsersInZipcode(db, zipcode):
-    retMe = list( db["/ari/users"].find( { "zipcode": encryptCreds(zipcode) } ) )
+    retMe = list( db["/ari/users"].find( { "zipcode": zipcode } ) )
     logTrace("getUsersInZipcode: zipcode:", zipcode, "retMe:", json.dumps(retMe))
     return retMe
 
@@ -632,21 +667,159 @@ def sendNotifications( args ):
 
 
 #
+# @return true if it's 7am
+#
+def isTimeForMorningForecast( fcttime ):
+    # TODO: return fcttime["hour_padded"] == "07"
+    return fcttime["hour_padded"] == "03"
+
+
+#
+# @return true if it's 7pm
+#
+def isTimeForEveningForecast( fcttime ):
+    # TODO: return fcttime["hour_padded"] == "19"
+    return fcttime["hour_padded"] == "03"
+
+
+#
+# @return an array of arrays, hourly_forecasts bucketed according to ari_iconCoarseLabel
+#
+def consolidateForecasts( hourly_forecasts ):
+    # consolidate consecutive coarseLabels
+    retMe = []
+    prev_i = 0
+    prev_coarseLabel = hourly_forecasts[0]["ari_iconCoarseLabel"]
+    for i in range(len(hourly_forecasts)):
+        curr_coarseLabel = hourly_forecasts[i]["ari_iconCoarseLabel"] 
+        if ( curr_coarseLabel != prev_coarseLabel ):
+            retMe.append( hourly_forecasts[ prev_i:i ] )
+            prev_i = i
+            prev_coarseLabel = curr_coarseLabel
+
+    retMe.append( hourly_forecasts[ prev_i: ] )
+
+    logTrace("consolidateForecasts: retMe:", retMe)
+    return retMe
+
+
+#
+# @return a message fragment for the given consolidatedBucket of hourly_forecasts (with same ari_iconCoarseLabel)
+#
+def buildMessageFragment(consolidatedBucket):
+    if (len(consolidatedBucket) == 1):
+        hourly_forecast = consolidatedBucket[0]
+        retMe = "{0}: {1}{2}".format( hourly_forecast["FCTTIME"]["civil"].replace(":00 ",""),
+                                      hourly_forecast["pop"] + "% " if hourly_forecast["pop"] != "0" else "",
+                                      hourly_forecast["ari_iconCoarseLabel"] )
+    else:
+        first_hourly_forecast = consolidatedBucket[0]
+        last_hourly_forecast = consolidatedBucket[-1]
+        retMe = "{0} thru {1}: {2}{3}".format( first_hourly_forecast["FCTTIME"]["civil"].replace(":00 ",""),
+                                               last_hourly_forecast["FCTTIME"]["civil"].replace(":00 ",""),
+                                               first_hourly_forecast["pop"] + "% " if first_hourly_forecast["pop"] != "0" else "",
+                                               first_hourly_forecast["ari_iconCoarseLabel"] )
+
+    logTrace("buildMessageFragment: retMe:", retMe)
+    return retMe
+
+
+
+#
+# @return a morning forecast msg
+#
+def buildMorningForecastMsg( zipcode, hourly_forecasts):
+
+    consolidatedBuckets = consolidateForecasts( hourly_forecasts[0:12] )
+    msgFragments = map( buildMessageFragment, consolidatedBuckets )
+
+    retMe = {}
+    retMe["_id"] = "morning-" + zipcode + "-" + formatFCTTIME( hourly_forecasts[0]["FCTTIME"] )
+    retMe["zipcode"] = zipcode
+    retMe["subject"] = "Today's Forecast"
+    retMe["msg"] = "{0}: {1}".format( zipcode, "; ".join(msgFragments) )
+
+    logTrace("buildMorningForecastMsg: retMe:", json.dumps(retMe))
+    return retMe
+        
+
+#
+# @return a morning forecast msg
+#
+def buildEveningForecastMsgs( zipcode, hourly_forecasts):
+
+    retMe = []
+
+    # build overnight msg
+    consolidatedBuckets = consolidateForecasts( hourly_forecasts[0:12] )
+    msgFragments = map( buildMessageFragment, consolidatedBuckets )
+
+    overnightMsg = {}
+    overnightMsg["_id"] = "overnight-" + zipcode + "-" + formatFCTTIME( hourly_forecasts[0]["FCTTIME"] )
+    overnightMsg["zipcode"] = zipcode
+    overnightMsg["subject"] = "Overnight Forecast"
+    overnightMsg["msg"] = "{0}: {1}".format( zipcode, "; ".join(msgFragments) )
+    retMe.append( overnightMsg )
+
+
+    # build next day msg
+    consolidatedBuckets = consolidateForecasts( hourly_forecasts[12:24] )
+    msgFragments = map( buildMessageFragment, consolidatedBuckets )
+
+    tomorrowMsg = {}
+    tomorrowMsg["_id"] = "tomorrow-" + zipcode + "-" + formatFCTTIME( hourly_forecasts[0]["FCTTIME"] )
+    tomorrowMsg["zipcode"] = zipcode
+    tomorrowMsg["subject"] = "Tomorrow's Forecast"
+    tomorrowMsg["msg"] = "{0}: {1}".format( zipcode, "; ".join(msgFragments) )
+    retMe.append( tomorrowMsg )
+
+    logTrace("buildEveningForecastMsgs: retMe:", retMe)
+    return retMe
+        
+
+
+#
+# @return a morning forecast msg
+#
+def buildEveningForecastMsg( zipcode, weatherData ):
+    return {}
+
+
+#
+# Add ari-app specific fields
+#
+# @return pre-processed weatherData
+#
+def preProcessWeatherData( weatherData ):
+
+    # map icons to coarseLabels
+    for hourly_forecast in weatherData["hourly_forecast"]:
+        hourly_forecast["ari_iconCoarseLabel"] = mapIconToCoarseLabel( hourly_forecast["icon"] )
+
+    return weatherData
+
+
+#
 # Process the weather data for the given zipcode.
 #
 def processWeatherData(db, zipcode, weatherData):
 
+    weatherData = preProcessWeatherData( weatherData )
+
     logTraceWeatherData( zipcode, weatherData )
 
-    # TODO
+    # Check for nearby tstorms
     if isTstormInForecast( weatherData["hourly_forecast"][0:3] ):
         msgs = buildTstormWarningMessages( zipcode, weatherData["hourly_forecast"][0:3] )
         upsertMessages( db, msgs )
 
-    # if isTimeForMorningForecast( weatherData["hourly_forecast"][0]["FCTTIME"] ):
-    #     queueMorningForecastMessage( zipcode, weatherData )
-    # elif isTimeForEveningForecast( weatherData["hourly_forecast"][0]["FCTTIME"] ):
-    #     queueEveningForecastMessage( zipcode, weatherData )
+    if isTimeForMorningForecast( weatherData["hourly_forecast"][0]["FCTTIME"] ):
+        msg = buildMorningForecastMsg( zipcode, weatherData["hourly_forecast"] )
+        upsertMessage( db, msg )
+
+    if isTimeForEveningForecast( weatherData["hourly_forecast"][0]["FCTTIME"] ):
+        msgs = buildEveningForecastMsgs( zipcode, weatherData["hourly_forecast"] )
+        upsertMessages( db, msgs )
 
 
 
@@ -663,7 +836,6 @@ def fetchAndProcessWeatherData(args):
     zipcodes = db["/ari/users"].distinct( "zipcode" )
 
     for zipcode in zipcodes:
-        zipcode = decryptCreds( zipcode )
         weatherData = fetchWeatherData(zipcode)
         processWeatherData(db, zipcode, weatherData)
 
@@ -689,7 +861,7 @@ def loadAndProcessWeatherData(args):
 def buildUser(args):
     retMe = {}
     retMe["_id"] = args["--user"]
-    retMe["zipcode"] = encryptCreds( args["--zipcode"] )
+    retMe["zipcode"] = args["--zipcode"] 
     retMe["notificationEmail"] = encryptCreds( args["--notificationEmail"] )
     # retMe["zipcodeTimeZone"] = fetchTimeZone( retMe["zipcode"] )
     return retMe
